@@ -278,6 +278,12 @@
       <div class="control-row" style="margin-bottom:18px;">
         <span class="control-label">Cliente</span>
         <select id="clientSelect"></select>
+        <span class="control-label">Status</span>
+        <select id="clientStatusFilter">
+          <option value="all">Todos</option>
+          <option value="Ativo">Ativos</option>
+          <option value="Inativo">Inativos</option>
+        </select>
       </div>
       <div class="chart-box tall"><div id="chartClientEvo"></div></div>
       <div class="legend-row">
@@ -538,6 +544,15 @@ RECORDS.forEach(r => {
   (recordsByClient[r.cliente] = recordsByClient[r.cliente] || []).push(r);
 });
 const CLIENT_NAMES = Object.keys(recordsByClient).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+// Each client's current status ('Ativo'/'Inativo'), taken from their most recent period on record —
+// used to power the Ativo/Inativo filter on the "Evolução por cliente" selector.
+const CLIENT_STATUS = {};
+CLIENT_NAMES.forEach(name => {
+  const rows = recordsByClient[name];
+  const last = rows.reduce((a,b) => b.period > a.period ? b : a, rows[0]);
+  CLIENT_STATUS[name] = last.status;
+});
 
 // ---------- Snapshot computation (recomputed whenever the period selector changes) ----------
 function computeSnapshot(periodInt){
@@ -1037,14 +1052,23 @@ try {
   label.textContent = PERIOD_LABEL[selectedPeriod] || '—';
 } catch (e) { console.error('month picker:', e); }
 
-// Client selector
+// Client selector, with an Ativo/Inativo status filter narrowing the client list
 try {
   const clientSelect = document.getElementById('clientSelect');
-  clientSelect.innerHTML = `<option value="${ALL_CLIENTS_VALUE}">Todos os clientes (visão agregada)</option>` +
-    CLIENT_NAMES.map(c => `<option value="${c}">${c}</option>`).join('');
-  clientSelect.value = ALL_CLIENTS_VALUE;
+  const statusFilter = document.getElementById('clientStatusFilter');
+
+  function populateClientSelect(filter){
+    const names = CLIENT_NAMES.filter(name => filter==='all' || CLIENT_STATUS[name]===filter);
+    const prevValue = clientSelect.value || ALL_CLIENTS_VALUE;
+    clientSelect.innerHTML = `<option value="${ALL_CLIENTS_VALUE}">Todos os clientes (visão agregada)</option>` +
+      names.map(c => `<option value="${c}">${c}${CLIENT_STATUS[c]==='Inativo' ? ' (inativo)' : ''}</option>`).join('');
+    clientSelect.value = (prevValue !== ALL_CLIENTS_VALUE && names.includes(prevValue)) ? prevValue : ALL_CLIENTS_VALUE;
+    renderClientEvo(clientSelect.value);
+  }
+
+  populateClientSelect('all');
   clientSelect.addEventListener('change', () => renderClientEvo(clientSelect.value));
-  renderClientEvo(ALL_CLIENTS_VALUE);
+  statusFilter.addEventListener('change', () => populateClientSelect(statusFilter.value));
 } catch (e) { console.error('client select:', e); }
 
 // Initial render
