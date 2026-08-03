@@ -59,9 +59,26 @@
   .client-info{font-size:13.5px; color:var(--cream-dim); margin-top:16px; padding-top:14px; border-top:1px solid var(--gray-line);}
   .client-info b{color:var(--cream);}
 
-  /* period selector: plain native <select> — opens the OS's own picker (iOS wheel /
-     Android dropdown), which is the option guaranteed to work on every mobile browser. */
-  .period-select{font-size:15px; font-weight:700; padding:10px 14px; min-width:140px;}
+  /* period selector: calendar-style month/year picker built on native <details>/<summary>
+     (open/close handled by the browser itself, no custom click/touch JS needed). */
+  .month-picker{position:relative;}
+  .month-picker-trigger{list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:15px; font-weight:700; padding:10px 14px; min-width:140px; background:var(--bg-card2); border:1px solid var(--gray-line); border-radius:10px; color:var(--cream); user-select:none;}
+  .month-picker-trigger::-webkit-details-marker{display:none;}
+  .month-picker-trigger::marker{content:"";}
+  .month-picker-trigger:hover{border-color:var(--orange2);}
+  .month-picker[open] .month-picker-trigger{border-color:var(--orange2);}
+  .mp-arrow{color:var(--gray); flex:0 0 auto; transition:transform .15s ease;}
+  .month-picker[open] .mp-arrow{transform:rotate(180deg);}
+  .month-picker-panel{position:absolute; top:calc(100% + 8px); right:0; z-index:20; width:260px; background:var(--bg-card2); border:1px solid var(--gray-line); border-radius:12px; padding:14px; box-shadow:0 12px 32px rgba(0,0,0,.45);}
+  .month-picker-year-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; font-size:14px; font-weight:700; color:var(--cream);}
+  .month-picker-nav{background:none; border:1px solid var(--gray-line); border-radius:8px; color:var(--cream); width:28px; height:28px; font-size:16px; line-height:1; cursor:pointer;}
+  .month-picker-nav:hover{border-color:var(--orange2); color:var(--orange2);}
+  .month-picker-nav:disabled{opacity:.3; cursor:not-allowed;}
+  .month-picker-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px;}
+  .month-btn{background:none; border:1px solid var(--gray-line); border-radius:8px; padding:8px 0; font-size:13px; font-weight:600; color:var(--cream-dim); cursor:pointer;}
+  .month-btn:hover:not(:disabled){border-color:var(--orange2); color:var(--cream);}
+  .month-btn:disabled{opacity:.25; cursor:not-allowed;}
+  .month-btn.selected{background:var(--orange); border-color:var(--orange); color:#fff;}
 
   /* exec summary */
   .exec{background:linear-gradient(135deg, #1D2127 0%, #171A1F 100%); border:1px solid var(--gray-line); border-radius:16px; padding:26px 28px; margin-bottom:36px;}
@@ -151,7 +168,9 @@
     .section-head{flex-direction:column; align-items:flex-start;}
     header{flex-direction:column; align-items:flex-start;}
     .period-tag{text-align:left; align-self:stretch;}
-    .period-select{width:100%;}
+    .month-picker{width:100%;}
+    .month-picker-trigger{width:100%;}
+    .month-picker-panel{left:0; right:auto; width:calc(100vw - 64px); max-width:280px;}
     .kpi-grid{grid-template-columns:repeat(2,1fr); gap:10px;}
     .kpi-value{font-size:20px;}
     .card{padding:16px;}
@@ -175,7 +194,20 @@
     </div>
     <div class="period-tag">
       <div class="lbl">Mês de referência (snapshot da carteira)</div>
-      <select id="periodSelect" class="period-select"></select>
+      <details class="month-picker" id="monthPicker">
+        <summary class="month-picker-trigger">
+          <span id="monthPickerLabel">—</span>
+          <svg class="mp-arrow" width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </summary>
+        <div class="month-picker-panel">
+          <div class="month-picker-year-row">
+            <button type="button" class="month-picker-nav" id="yearPrev" aria-label="Ano anterior">‹</button>
+            <span id="yearLabel">—</span>
+            <button type="button" class="month-picker-nav" id="yearNext" aria-label="Próximo ano">›</button>
+          </div>
+          <div class="month-picker-grid" id="monthGrid"></div>
+        </div>
+      </details>
     </div>
   </header>
 
@@ -876,28 +908,64 @@ try {
 } catch (e) { console.error('churn text:', e); }
 
 // Period selector setup
+const MES_ABBR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const PERIOD_SET = new Set(PERIODS.map(p => p.period));
 const YEARS = [...new Set(PERIODS.map(p => Math.floor(p.period/12)))].sort((a,b)=>a-b);
 let CURRENT_PERIOD = DATA.meta.default_period; // tracked at top scope so the resize handler can re-render the right month
 
-// Period selector — plain native <select>, grouped by year via <optgroup>.
-// Native <select> interaction (open/close, scrolling, tap-to-choose) is handled entirely
-// by the OS/browser chrome, so it is immune to the custom click/touch-handling issues
-// that broke the two previous calendar-widget attempts on mobile.
+// Month/year calendar-style period picker, built on native <details>/<summary> —
+// open/close is handled entirely by the browser, no custom click/outside-click JS.
 try {
-  const periodSelect = document.getElementById('periodSelect');
-  periodSelect.innerHTML = YEARS.slice().reverse().map(year => {
-    const opts = PERIODS
-      .filter(p => Math.floor(p.period/12) === year)
-      .slice().reverse()
-      .map(p => `<option value="${p.period}">${p.label}</option>`).join('');
-    return `<optgroup label="${year}">${opts}</optgroup>`;
-  }).join('');
-  periodSelect.value = String(DATA.meta.default_period);
-  periodSelect.addEventListener('change', () => {
-    CURRENT_PERIOD = parseInt(periodSelect.value, 10);
-    renderSnapshot(computeSnapshot(CURRENT_PERIOD));
+  let selectedPeriod = DATA.meta.default_period;
+  let viewYear = Math.floor(selectedPeriod/12);
+
+  const details = document.getElementById('monthPicker');
+  const label = document.getElementById('monthPickerLabel');
+  const yearLabel = document.getElementById('yearLabel');
+  const monthGrid = document.getElementById('monthGrid');
+  const yearPrev = document.getElementById('yearPrev');
+  const yearNext = document.getElementById('yearNext');
+
+  function selectPeriod(period){
+    selectedPeriod = period;
+    CURRENT_PERIOD = period;
+    label.textContent = PERIOD_LABEL[period] || '—';
+    renderSnapshot(computeSnapshot(period));
+    details.open = false;
+  }
+
+  function renderMonthGrid(){
+    yearLabel.textContent = viewYear;
+    yearPrev.disabled = viewYear <= YEARS[0];
+    yearNext.disabled = viewYear >= YEARS[YEARS.length-1];
+    monthGrid.innerHTML = MES_ABBR.map((abbr, idx) => {
+      const period = viewYear*12 + (idx+1);
+      const available = PERIOD_SET.has(period);
+      const isSelected = period === selectedPeriod;
+      return `<button type="button" class="month-btn${isSelected?' selected':''}" data-period="${period}" ${available?'':'disabled'}>${abbr}</button>`;
+    }).join('');
+    monthGrid.querySelectorAll('.month-btn:not(:disabled)').forEach(btn => {
+      btn.addEventListener('click', () => selectPeriod(parseInt(btn.getAttribute('data-period'), 10)));
+    });
+  }
+
+  yearPrev.addEventListener('click', (e) => { e.preventDefault(); if(viewYear > YEARS[0]){ viewYear--; renderMonthGrid(); } });
+  yearNext.addEventListener('click', (e) => { e.preventDefault(); if(viewYear < YEARS[YEARS.length-1]){ viewYear++; renderMonthGrid(); } });
+
+  details.addEventListener('toggle', () => {
+    if (details.open) {
+      viewYear = Math.floor(selectedPeriod/12);
+      renderMonthGrid();
+    }
   });
-} catch (e) { console.error('period select:', e); }
+
+  // Close the picker if the user taps/clicks outside of it while it's open.
+  document.addEventListener('click', (e) => {
+    if (details.open && !details.contains(e.target)) details.open = false;
+  });
+
+  label.textContent = PERIOD_LABEL[selectedPeriod] || '—';
+} catch (e) { console.error('month picker:', e); }
 
 // Client selector
 try {
