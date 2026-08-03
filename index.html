@@ -403,15 +403,6 @@
     <div class="card" id="actionPlanCard"></div>
   </section>
 
-  <section>
-    <div class="section-head">
-      <h2 class="section-title">O que o histórico de saída ensina</h2>
-    </div>
-    <div class="card">
-      <p id="churnText" style="font-size:14.5px; color:var(--cream-dim); margin:0;"></p>
-    </div>
-  </section>
-
   <footer>
     <span>uappi · margem de recorrência</span>
     <span id="footerMeta"></span>
@@ -816,7 +807,7 @@ function renderScatter(containerId, quadrant){
       const y = yScale(realPct);
       const r = (clipped ? 5.5 : 4.5) * (narrow ? 0.85 : 1);
       const strokeAttr = clipped ? `stroke="#0E1013" stroke-width="1.5"` : '';
-      const tip = esc(c.cliente)+'<br>Receita: '+esc(fmtMoneyFull(c.receita))+'<br>Margem direta: '+esc(realPct.toFixed(0)+'%')+(clipped?' <span style="color:#A9B0B8">(fora da escala do gráfico)</span>':'');
+      const tip = esc(c.cliente)+'<br>Receita: '+esc(fmtMoneyFull(c.receita))+'<br>Margem direta: '+esc(realPct.toFixed(0)+'%')+(clipped?" <span style='color:#A9B0B8'>(fora da escala do gráfico)</span>":'');
       dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${colorFor(c.bucket)}" fill-opacity="0.85" ${strokeAttr} data-tooltip="${tip}"/>`;
     });
 
@@ -985,12 +976,6 @@ function renderClientEvo(clientName){
 try {
   document.getElementById('footerMeta').textContent = 'Base histórica: ' + DATA.meta.total_clientes_historico + ' clientes distintos desde jan/2024 · ' + DATA.meta.total_ja_saiu + ' já encerrados';
 } catch (e) { console.error('footer:', e); }
-
-// Churn text (static, independent of selected period)
-try {
-  const cs = DATA.churn_summary;
-  document.getElementById('churnText').innerHTML = `Dos <b>${cs.total_ja_saiu_com_dado} clientes</b> que já encerraram operação com a uappi e possuem histórico de receita, a margem direta média nos últimos meses antes da saída foi de <b>${fmtPct(cs.avg_margin_saida)}</b> (mediana de ${fmtPct(cs.median_margin_saida)}). Apenas <b>${fmtPct(cs.pct_saiu_abaixo_60)}</b> dos que saíram já estavam em faixa crítica (&lt;60%) antes de encerrar. Leitura para o plano de ação: cliente com margem ruim é urgência financeira <i>agora</i>, mas o churn em si historicamente tem outra origem — o que reforça que "salvar margem" e "reter cliente" são dois problemas relacionados, mas não idênticos.`;
-} catch (e) { console.error('churn text:', e); }
 
 // Period selector setup
 const MES_ABBR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
