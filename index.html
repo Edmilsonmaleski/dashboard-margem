@@ -114,6 +114,8 @@
   /* Ofensores por categoria de custo */
   .offender-card h3{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; flex-wrap:wrap;}
   .offender-target{font-size:10.5px; font-weight:700; color:var(--gray); background:var(--bg); padding:3px 8px; border-radius:999px; white-space:nowrap;}
+  .offender-total{font-size:12px; color:var(--cream-dim); margin-top:10px; padding-bottom:12px; border-bottom:1px solid var(--gray-line);}
+  .offender-total:empty{display:none;}
   .offender-list{list-style:none; margin:14px 0 0; padding:0; display:flex; flex-direction:column; gap:12px;}
   .offender-item{display:flex; gap:10px; align-items:flex-start; cursor:pointer;}
   .off-rank{flex:0 0 auto; width:20px; height:20px; border-radius:50%; background:var(--bg); border:1px solid var(--gray-line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--gray);}
@@ -321,18 +323,22 @@
     <div class="grid-4">
       <div class="card offender-card">
         <h3>Impostos <span class="offender-target">meta 10,0%</span></h3>
+        <div class="offender-total" id="offImpostosTotal"></div>
         <ol class="offender-list" id="offImpostos"></ol>
       </div>
       <div class="card offender-card">
         <h3>Infraestrutura <span class="offender-target">meta 12,5%</span></h3>
+        <div class="offender-total" id="offInfraTotal"></div>
         <ol class="offender-list" id="offInfra"></ol>
       </div>
       <div class="card offender-card">
         <h3>Comissão <span class="offender-target">meta 3,5%</span></h3>
+        <div class="offender-total" id="offComissaoTotal"></div>
         <ol class="offender-list" id="offComissao"></ol>
       </div>
       <div class="card offender-card">
         <h3>Suporte &amp; Sucesso <span class="offender-target">meta 4,0%</span></h3>
+        <div class="offender-total" id="offSucSupTotal"></div>
         <ol class="offender-list" id="offSucSup"></ol>
       </div>
     </div>
@@ -471,10 +477,10 @@ function classifyDriver(r){
 // The 4 cost categories that make up the 30% consumed above the 70% margem direta target
 // (10% impostos + 12,5% infra + 3,5% comissão + 4% suporte&sucesso).
 const COST_CATEGORIES = [
-  {key:'impostos_pct', label:'Impostos', target:0.10, elId:'offImpostos'},
-  {key:'infra_pct', label:'Infraestrutura', target:0.125, elId:'offInfra'},
-  {key:'comissao_pct', label:'Comissão', target:0.035, elId:'offComissao'},
-  {key:'sucsup_pct', label:'Suporte & Sucesso', target:0.04, elId:'offSucSup'},
+  {key:'impostos_pct', label:'Impostos', target:0.10, elId:'offImpostos', totalElId:'offImpostosTotal'},
+  {key:'infra_pct', label:'Infraestrutura', target:0.125, elId:'offInfra', totalElId:'offInfraTotal'},
+  {key:'comissao_pct', label:'Comissão', target:0.035, elId:'offComissao', totalElId:'offComissaoTotal'},
+  {key:'sucsup_pct', label:'Suporte & Sucesso', target:0.04, elId:'offSucSup', totalElId:'offSucSupTotal'},
 ];
 function badgeHtml(bucket){ return `<span class="badge ${bucket}">${bucketLabel(bucket)}</span>`; }
 
@@ -900,6 +906,15 @@ function renderSnapshot(k){
       const el = document.getElementById(cat.elId);
       if(!el) return;
       const list = k.offenders[cat.key] || [];
+
+      const totalEl = document.getElementById(cat.totalElId);
+      if(totalEl){
+        const totalExcess = list.reduce((a,o)=>a+o.excess_rs,0);
+        totalEl.innerHTML = list.length
+          ? `Total dos ${list.length} listados: <span class="off-excess">${fmtMoneyFull(totalExcess)} acima da meta</span>`
+          : '';
+      }
+
       el.innerHTML = list.length ? list.map((o,idx) => {
         const tip = esc(o.cliente)+'<br>Receita: '+esc(fmtMoneyFull(o.receita))+'<br>Custo real: '+esc(fmtPct1(o.actual))+' (meta '+esc(fmtPct1(cat.target))+')<br>Excedente: '+esc(fmtMoneyFull(o.excess_rs));
         return `
