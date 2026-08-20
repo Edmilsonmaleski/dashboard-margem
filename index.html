@@ -145,6 +145,10 @@
   .badge.atencao{background:rgba(254,106,45,0.16); color:var(--orange2);}
   .badge.critico{background:rgba(194,62,0,0.22); color:#ff8a5c;}
   .table-scroll{max-height:520px; overflow-y:auto; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .th-target{display:block; font-weight:400; font-size:10px; color:var(--gray); text-transform:none; margin-top:2px;}
+  td.cost-cell{text-align:right; font-variant-numeric:tabular-nums;}
+  td.cost-cell .over{color:var(--orange2); font-weight:700;}
+  td.cost-cell .ok{color:var(--gray);}
   .table-scroll::-webkit-scrollbar{width:6px; height:6px;}
   .table-scroll::-webkit-scrollbar-thumb{background:var(--gray-line); border-radius:3px;}
   .table-scroll table{min-width:480px;}
@@ -379,12 +383,12 @@
     <section>
       <div class="section-head">
         <h2 class="section-title">Clientes críticos</h2>
-        <div class="section-note">Margem direta &lt;60%, ordenados por receita. Referência: <span class="snap-period">—</span>.</div>
+        <div class="section-note">Margem direta &lt;60%, ordenados por receita · % de cada despesa sobre a receita do cliente, destacado quando acima da meta. Referência: <span class="snap-period">—</span>.</div>
       </div>
       <div class="card">
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Cliente</th><th class="num">Receita</th><th class="num">Margem</th><th>Vilão</th></tr></thead>
+            <thead><tr><th>Cliente</th><th class="num">Receita</th><th class="num">Margem</th><th class="num">Impostos<br><span class="th-target">meta 10,0%</span></th><th class="num">Infra<br><span class="th-target">meta 12,5%</span></th><th class="num">Comissão<br><span class="th-target">meta 3,5%</span></th><th class="num">Suc&amp;Sup<br><span class="th-target">meta 4,0%</span></th></tr></thead>
             <tbody id="tblCritical"></tbody>
           </table>
         </div>
@@ -884,13 +888,20 @@ function renderSnapshot(k){
         <td class="num">${fmtPct(r.sucsup_pct)}</td>
       </tr>`).join('') || `<tr><td colspan="6" class="empty-note">Sem dados.</td></tr>`;
 
+    function costCell(actual, target){
+      const cls = actual > target ? 'over' : 'ok';
+      return `<td class="cost-cell"><span class="${cls}">${fmtPct1(actual)}</span></td>`;
+    }
     document.getElementById('tblCritical').innerHTML = k.critical.map(r => `
       <tr>
         <td class="name">${r.cliente}</td>
         <td class="num">${fmtMoneyFull(r.receita)}</td>
         <td class="num">${marginSpan(r.margem_pct)}</td>
-        <td>${r.main_driver}</td>
-      </tr>`).join('') || `<tr><td colspan="4" class="empty-note">Nenhum cliente crítico neste mês.</td></tr>`;
+        ${costCell(Math.abs(r.impostos_pct||0), 0.10)}
+        ${costCell(Math.abs(r.infra_pct||0), 0.125)}
+        ${costCell(Math.abs(r.comissao_pct||0), 0.035)}
+        ${costCell(Math.abs(r.sucsup_pct||0), 0.04)}
+      </tr>`).join('') || `<tr><td colspan="7" class="empty-note">Nenhum cliente crítico neste mês.</td></tr>`;
 
     document.getElementById('tblHealthy').innerHTML = k.healthy.map(r => `
       <tr>
