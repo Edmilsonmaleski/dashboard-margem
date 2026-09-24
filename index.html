@@ -92,6 +92,30 @@
   .exec .orange-text{color:var(--orange2); font-weight:600;}
   .exec .deep-text{color:var(--orange-deep); font-weight:700;}
 
+  /* Resumo do mês: headline numbers + abertura visual dos custos vs meta */
+  .resumo-card{background:linear-gradient(135deg, #1D2127 0%, #171A1F 100%); border:1px solid var(--gray-line); border-radius:16px; padding:26px 28px; margin-bottom:36px;}
+  .resumo-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; gap:10px;}
+  .resumo-head h2{margin:0; font-size:16px; font-weight:700;}
+  .resumo-kpis{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-bottom:24px;}
+  .resumo-kpi{background:var(--bg-card2); border:1px solid var(--gray-line); border-radius:12px; padding:16px 18px;}
+  .resumo-kpi-label{font-size:12px; color:var(--gray); margin-bottom:8px;}
+  .resumo-kpi-value{font-size:26px; font-weight:700; color:var(--cream); letter-spacing:-0.01em;}
+  .resumo-breakdown-label{font-size:12px; color:var(--gray); margin-bottom:14px;}
+  .budget-row{display:grid; grid-template-columns:150px 1fr 64px; align-items:center; gap:14px; margin-bottom:14px;}
+  .budget-row:last-child{margin-bottom:0;}
+  .budget-label{font-size:13px; font-weight:600; color:var(--cream-dim);}
+  .budget-label .budget-target-tag{display:block; font-size:10.5px; font-weight:400; color:var(--gray); margin-top:2px;}
+  .budget-track{position:relative; height:10px; background:var(--bg); border-radius:6px; overflow:visible;}
+  .budget-fill{position:absolute; left:0; top:0; height:100%; border-radius:6px; background:var(--gray-light); transition:width .2s ease;}
+  .budget-fill.over{background:var(--orange2);}
+  .budget-marker{position:absolute; top:-3px; width:2px; height:16px; background:#6b7280;}
+  .budget-value{font-size:14px; font-weight:700; text-align:right; color:var(--cream);}
+  .budget-value.over{color:var(--orange2);}
+  @media (max-width:640px){
+    .resumo-kpis{grid-template-columns:1fr; gap:10px;}
+    .budget-row{grid-template-columns:110px 1fr 52px; gap:8px;}
+  }
+
   /* KPI strip */
   .kpi-grid{display:grid; grid-template-columns:repeat(5, 1fr); gap:14px; margin-bottom:36px;}
   .kpi-card{background:var(--bg-card); border:1px solid var(--gray-line); border-radius:14px; padding:18px 18px 16px;}
@@ -271,6 +295,7 @@
   </header>
 
   <nav class="dashnav" id="dashnav" aria-label="Navegação do relatório">
+    <a href="#resumo" class="dashnav-link">Resumo do mês</a>
     <a href="#exec" class="dashnav-link">Leitura executiva</a>
     <a href="#saude" class="dashnav-link">Saúde da carteira</a>
     <a href="#evol-mensal" class="dashnav-link">Evolução mensal</a>
@@ -288,6 +313,31 @@
   <div class="eyebrow"><span class="dot"></span>margem de recorrência</div>
   <h1>Diagnóstico de carteira e prioridades de retenção</h1>
   <p class="subtitle">Leitura da base completa de clientes recorrentes — quem sustenta o resultado, quem está drenando margem e onde direcionar o plano de ação, com base no indicador de margem direta. Use o seletor de mês acima para navegar o histórico.</p>
+
+  <section id="resumo" style="margin-top:28px;">
+    <div class="resumo-card">
+      <div class="resumo-head">
+        <h2>Resumo do mês</h2>
+        <div class="section-note">Referência: <span class="snap-period">—</span>.</div>
+      </div>
+      <div class="resumo-kpis">
+        <div class="resumo-kpi">
+          <div class="resumo-kpi-label">Receita ativa</div>
+          <div class="resumo-kpi-value" id="resumoReceita">—</div>
+        </div>
+        <div class="resumo-kpi">
+          <div class="resumo-kpi-label">Margem direta</div>
+          <div class="resumo-kpi-value" id="resumoMargemDireta">—</div>
+        </div>
+        <div class="resumo-kpi">
+          <div class="resumo-kpi-label">Margem líquida (após IR/CSLL e demais despesas)</div>
+          <div class="resumo-kpi-value" id="resumoMargemLiquida">—</div>
+        </div>
+      </div>
+      <div class="resumo-breakdown-label">Abertura da despesa direta — % da receita ativa, blended, vs. meta de cada categoria (soma das metas = 30%, o que sustenta a margem direta de 70%)</div>
+      <div id="resumoBudgetRows"></div>
+    </div>
+  </section>
 
   <section class="exec" id="exec" style="margin-top:28px;">
     <h2>Leitura executiva</h2>
@@ -568,6 +618,9 @@ const COST_CATEGORIES = [
   {key:'comissao_pct', label:'Comissão', target:0.035, elId:'offComissao', totalElId:'offComissaoTotal'},
   {key:'sucsup_pct', label:'Suporte & Sucesso', target:0.04, elId:'offSucSup', totalElId:'offSucSupTotal'},
 ];
+// Escala compartilhada pelas barras de "Resumo do mês", em pontos percentuais — mesma escala
+// para as 4 categorias para que o tamanho das barras seja comparável entre si.
+const BUDGET_BAR_MAX = 0.18;
 function badgeHtml(bucket){ return `<span class="badge ${bucket}">${bucketLabel(bucket)}</span>`; }
 
 // Highlights a margem direta % using the same 3-tier color language as the charts/badges:
@@ -653,6 +706,16 @@ function computeSnapshot(periodInt){
   const margem_direta_rs = rows.reduce((a,r)=>a+r.margem_rs,0);
   const lucro_total = rows.reduce((a,r)=>a+r.lucro,0);
   const blended_margem_pct = receita_total ? margem_direta_rs/receita_total : 0;
+  // Margem líquida: lucro final do mês (já após IR/CSLL e demais despesas proporcionais) sobre a receita ativa.
+  const blended_margem_liquida_pct = receita_total ? lucro_total/receita_total : 0;
+
+  // Abertura blended de cada categoria de custo direto (Impostos/Infra/Comissão/Suporte&Sucesso),
+  // ponderada pela receita de cada cliente — não é a média simples dos percentuais individuais.
+  const blended_costs = {};
+  COST_CATEGORIES.forEach(cat => {
+    const weighted = rows.reduce((a,r) => a + Math.abs(r[cat.key]||0)*r.receita, 0);
+    blended_costs[cat.key] = receita_total ? weighted/receita_total : 0;
+  });
 
   const bucketed = rows.map(r => {
     const bucket = bucketOf(r.margem_pct);
@@ -711,6 +774,7 @@ function computeSnapshot(periodInt){
     last_period_label: PERIOD_LABEL[periodInt] || '—',
     clientes_ativos: rows.length,
     receita_total, margem_direta_rs, blended_margem_pct, lucro_total,
+    blended_margem_liquida_pct, blended_costs,
     bucket_counts, bucket_revenue, bucket_margem,
     top_revenue, critical, healthy,
     top_30, concentracao_top30_receita_pct, concentracao_top30_margem_pct,
@@ -957,6 +1021,38 @@ function renderSnapshot(k){
     execPoints.push(`O histórico de saída de clientes mostra algo contraintuitivo: <b>${fmtPct(DATA.churn_summary.pct_saiu_acima_70)} dos clientes que já saíram</b> estavam com margem direta acima de 70% nos últimos meses de operação — ou seja, a maior parte do churn histórico não foi causada por má margem. Isso não tira a urgência de agir nos críticos de hoje, mas evita tratar margem baixa como a explicação única para perda de cliente.`);
     document.getElementById('execList').innerHTML = execPoints.map(p => `<li>${p}</li>`).join('');
   } catch (e) { console.error('exec summary:', e); }
+
+  // Resumo do mês: 3 números-chave + abertura visual dos custos vs. meta
+  try {
+    const rReceita = document.getElementById('resumoReceita');
+    const rMargemDireta = document.getElementById('resumoMargemDireta');
+    const rMargemLiquida = document.getElementById('resumoMargemLiquida');
+    if(rReceita){
+      rReceita.textContent = fmtMoneyFull(k.receita_total);
+      rMargemDireta.textContent = fmtPct(k.blended_margem_pct);
+      rMargemDireta.style.color = marginColor(k.blended_margem_pct);
+      rMargemLiquida.textContent = fmtPct(k.blended_margem_liquida_pct);
+      rMargemLiquida.style.color = k.blended_margem_liquida_pct < 0 ? 'var(--orange-deep)' : 'var(--cream)';
+    }
+    const budgetContainer = document.getElementById('resumoBudgetRows');
+    if(budgetContainer){
+      budgetContainer.innerHTML = COST_CATEGORIES.map(cat => {
+        const actual = k.blended_costs[cat.key] || 0;
+        const over = actual > cat.target;
+        const fillPct = Math.min(actual/BUDGET_BAR_MAX*100, 100);
+        const markerPct = Math.min(cat.target/BUDGET_BAR_MAX*100, 100);
+        return `
+        <div class="budget-row">
+          <div class="budget-label">${cat.label}<span class="budget-target-tag">meta ${fmtPct1(cat.target)}</span></div>
+          <div class="budget-track">
+            <div class="budget-fill${over?' over':''}" style="width:${fillPct.toFixed(1)}%"></div>
+            <div class="budget-marker" style="left:${markerPct.toFixed(1)}%"></div>
+          </div>
+          <div class="budget-value${over?' over':''}">${fmtPct1(actual)}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) { console.error('resumo do mes:', e); }
 
   // KPI cards
   try {
