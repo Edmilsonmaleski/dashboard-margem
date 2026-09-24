@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#0E1013;
@@ -145,6 +146,16 @@
   .badge.atencao{background:rgba(254,106,45,0.16); color:var(--orange2);}
   .badge.critico{background:rgba(194,62,0,0.22); color:#ff8a5c;}
   .table-scroll{max-height:520px; overflow-y:auto; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .card-toolbar{display:flex; justify-content:flex-end; margin-bottom:12px;}
+  .export-btn{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--bg-card2); border:1px solid var(--gray-line); border-radius:8px;
+    color:var(--cream-dim); font-family:inherit; font-size:12px; font-weight:600;
+    padding:7px 12px; cursor:pointer;
+  }
+  .export-btn svg{flex:0 0 auto;}
+  .export-btn:hover{border-color:var(--orange2); color:var(--orange2);}
+  .export-btn:disabled{opacity:.5; cursor:not-allowed;}
   .th-target{display:block; font-weight:400; font-size:10px; color:var(--gray); text-transform:none; margin-top:2px;}
   td.cost-cell{text-align:right; font-variant-numeric:tabular-nums;}
   td.cost-cell .over{color:var(--orange2); font-weight:700;}
@@ -413,6 +424,9 @@
       <div class="section-note">Top 20 clientes ativos por receita bruta mensal. Referência: <span class="snap-period">—</span>.</div>
     </div>
     <div class="card">
+      <div class="card-toolbar">
+        <button type="button" class="export-btn" onclick="exportTopRevenue()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg> Exportar Excel</button>
+      </div>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Cliente</th><th class="num">Receita (R$)</th><th class="num">Margem direta</th><th>Status</th><th class="num">Infra/Fat</th><th class="num">Suc&amp;Sup/Fat</th></tr></thead>
@@ -429,6 +443,9 @@
     </div>
     <div class="card">
       <div class="offender-total" id="top30Summary"></div>
+      <div class="card-toolbar">
+        <button type="button" class="export-btn" onclick="exportTop30()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg> Exportar Excel</button>
+      </div>
       <div class="table-scroll">
         <table>
           <thead><tr><th>#</th><th>Cliente</th><th class="num">Receita (R$)</th><th class="num">% da receita</th><th class="num">Margem direta</th><th class="num">Margem (R$)</th><th class="num">% da margem</th></tr></thead>
@@ -445,6 +462,9 @@
         <div class="section-note">Margem direta &lt;60%, ordenados por receita · % de cada despesa sobre a receita do cliente, destacado quando acima da meta. Referência: <span class="snap-period">—</span>.</div>
       </div>
       <div class="card">
+        <div class="card-toolbar">
+          <button type="button" class="export-btn" onclick="exportCritical()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg> Exportar Excel</button>
+        </div>
         <div class="table-scroll">
           <table>
             <thead><tr><th>Cliente</th><th class="num">Receita</th><th class="num">Margem</th><th class="num">Impostos<br><span class="th-target">meta 10,0%</span></th><th class="num">Infra<br><span class="th-target">meta 12,5%</span></th><th class="num">Comissão<br><span class="th-target">meta 3,5%</span></th><th class="num">Suc&amp;Sup<br><span class="th-target">meta 4,0%</span></th></tr></thead>
@@ -460,6 +480,9 @@
         <div class="section-note">Margem direta ≥70%, maiores receitas. Referência: <span class="snap-period">—</span>.</div>
       </div>
       <div class="card">
+        <div class="card-toolbar">
+          <button type="button" class="export-btn" onclick="exportHealthy()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg> Exportar Excel</button>
+        </div>
         <div class="table-scroll">
           <table>
             <thead><tr><th>Cliente</th><th class="num">Receita</th><th class="num">Margem</th></tr></thead>
@@ -913,7 +936,12 @@ function renderScatter(containerId, quadrant){
 }
 
 // ---------- Render a full snapshot into the page ----------
+// Holds the most recently rendered snapshot so the export buttons always pull fresh
+// data for whichever month is on screen, without recomputing anything themselves.
+let LAST_SNAPSHOT = null;
+
 function renderSnapshot(k){
+  LAST_SNAPSHOT = k;
   document.querySelectorAll('.snap-period').forEach(el => el.textContent = k.last_period_label);
 
   // Exec summary
@@ -1072,6 +1100,76 @@ function renderSnapshot(k){
   renderScatter('chartQuadrant', k.quadrant);
 
   renderTrendChart('chartTrend', DATA.trend, {highlightPeriod: k.period});
+}
+
+// ---------- Excel export (SheetJS) for the scrollable tables ----------
+// Reads structured data straight from the last rendered snapshot (not scraped from the
+// DOM), so numbers export as real numbers and percentages come out already in %.
+function exportToExcel(rows, columns, filename){
+  try {
+    if(typeof XLSX === 'undefined'){
+      alert('A biblioteca de exportação ainda está carregando. Aguarde alguns segundos e tente novamente.');
+      return;
+    }
+    const data = rows.map((r, i) => {
+      const obj = {};
+      columns.forEach(c => { obj[c.header] = typeof c.value === 'function' ? c.value(r, i) : r[c.value]; });
+      return obj;
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Dados');
+    XLSX.writeFile(wb, filename);
+  } catch (e) { console.error('export excel:', e); alert('Não foi possível exportar para Excel. Veja o console para detalhes.'); }
+}
+
+function pct1(v){ return +(v*100).toFixed(1); }
+
+function exportTopRevenue(){
+  if(!LAST_SNAPSHOT) return;
+  exportToExcel(LAST_SNAPSHOT.top_revenue, [
+    {header:'Cliente', value:'cliente'},
+    {header:'Receita (R$)', value:'receita'},
+    {header:'Margem direta (%)', value: r => pct1(r.margem_pct)},
+    {header:'Status', value: r => bucketLabel(r.bucket)},
+    {header:'Infra/Fat (%)', value: r => pct1(r.infra_pct)},
+    {header:'Suc&Sup/Fat (%)', value: r => pct1(r.sucsup_pct)},
+  ], `uappi_ranking_impacto_${LAST_SNAPSHOT.last_period_label.replace('/','-')}.xlsx`);
+}
+
+function exportTop30(){
+  if(!LAST_SNAPSHOT) return;
+  exportToExcel(LAST_SNAPSHOT.top_30, [
+    {header:'#', value: (r,i) => i+1},
+    {header:'Cliente', value:'cliente'},
+    {header:'Receita (R$)', value:'receita'},
+    {header:'% da receita ativa', value: r => pct1(r.rep_receita_pct)},
+    {header:'Margem direta (%)', value: r => pct1(r.margem_pct)},
+    {header:'Margem (R$)', value:'margem_rs'},
+    {header:'% da margem total', value: r => pct1(r.rep_margem_pct)},
+  ], `uappi_top30_receita_${LAST_SNAPSHOT.last_period_label.replace('/','-')}.xlsx`);
+}
+
+function exportCritical(){
+  if(!LAST_SNAPSHOT) return;
+  exportToExcel(LAST_SNAPSHOT.critical, [
+    {header:'Cliente', value:'cliente'},
+    {header:'Receita (R$)', value:'receita'},
+    {header:'Margem direta (%)', value: r => pct1(r.margem_pct)},
+    {header:'Impostos (%)', value: r => pct1(Math.abs(r.impostos_pct||0))},
+    {header:'Infra (%)', value: r => pct1(Math.abs(r.infra_pct||0))},
+    {header:'Comissão (%)', value: r => pct1(Math.abs(r.comissao_pct||0))},
+    {header:'Suc&Sup (%)', value: r => pct1(Math.abs(r.sucsup_pct||0))},
+  ], `uappi_clientes_criticos_${LAST_SNAPSHOT.last_period_label.replace('/','-')}.xlsx`);
+}
+
+function exportHealthy(){
+  if(!LAST_SNAPSHOT) return;
+  exportToExcel(LAST_SNAPSHOT.healthy, [
+    {header:'Cliente', value:'cliente'},
+    {header:'Receita (R$)', value:'receita'},
+    {header:'Margem direta (%)', value: r => pct1(r.margem_pct)},
+  ], `uappi_clientes_saudaveis_${LAST_SNAPSHOT.last_period_label.replace('/','-')}.xlsx`);
 }
 
 // ---------- Client evolution ----------
