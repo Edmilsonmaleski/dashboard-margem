@@ -302,6 +302,7 @@
     <a href="#evol-cliente" class="dashnav-link">Evolução por cliente</a>
     <a href="#corrosao" class="dashnav-link">Corrosão de margem</a>
     <a href="#ofensores" class="dashnav-link">Ofensores por custo</a>
+    <a href="#evol-custos" class="dashnav-link">Evolução dos custos</a>
     <a href="#matriz" class="dashnav-link">Matriz de retenção</a>
     <a href="#ranking" class="dashnav-link">Ranking de impacto</a>
     <a href="#top30" class="dashnav-link">Top 30 por receita</a>
@@ -448,6 +449,22 @@
         <h3>Suporte &amp; Sucesso <span class="offender-target">meta 4,0%</span></h3>
         <div class="offender-total" id="offSucSupTotal"></div>
         <ol class="offender-list" id="offSucSup"></ol>
+      </div>
+    </div>
+  </section>
+
+  <section id="evol-custos">
+    <div class="section-head">
+      <h2 class="section-title">Evolução dos custos por categoria</h2>
+      <div class="section-note">% da receita ativa consumida por cada categoria, blended, mês a mês — para enxergar onde a carteira está evoluindo (ou piorando) frente à meta.</div>
+    </div>
+    <div class="card">
+      <div class="chart-box tall"><div id="chartCostTrend"></div></div>
+      <div class="legend-row">
+        <div class="legend-chip"><span class="sw" style="background:#A9B0B8"></span>Impostos (meta 10,0%)</div>
+        <div class="legend-chip"><span class="sw" style="background:#FE6A2D"></span>Infraestrutura (meta 12,5%)</div>
+        <div class="legend-chip"><span class="sw" style="background:#FFA986"></span>Comissão (meta 3,5%)</div>
+        <div class="legend-chip"><span class="sw" style="background:#C23E00"></span>Suporte &amp; Sucesso (meta 4,0%)</div>
       </div>
     </div>
   </section>
@@ -698,6 +715,20 @@ CLIENT_NAMES.forEach(name => {
   const last = rows.reduce((a,b) => b.period > a.period ? b : a, rows[0]);
   CLIENT_STATUS[name] = last.status;
 });
+
+// Evolução mensal blended de cada categoria de custo direto, mês a mês, desde jan/2024 —
+// independente do mês selecionado no snapshot (mostra a série inteira sempre).
+const COST_TREND = PERIODS.map(p => {
+  const rows = (recordsByPeriod[p.period] || []).filter(r => r.status === 'Ativo');
+  const receita_total = rows.reduce((a,r) => a+r.receita, 0);
+  const entry = {period: p.period, label: p.label};
+  COST_CATEGORIES.forEach(cat => {
+    const weighted = rows.reduce((a,r) => a + Math.abs(r[cat.key]||0)*r.receita, 0);
+    entry[cat.key] = receita_total ? weighted/receita_total : 0;
+  });
+  return entry;
+});
+const COST_TREND_COLORS = {impostos_pct:'#A9B0B8', infra_pct:'#FE6A2D', comissao_pct:'#FFA986', sucsup_pct:'#C23E00'};
 
 // ---------- Snapshot computation (recomputed whenever the period selector changes) ----------
 function computeSnapshot(periodInt){
@@ -999,6 +1030,62 @@ function renderScatter(containerId, quadrant){
   } catch(e){ console.error('renderScatter '+containerId, e); }
 }
 
+// Linha do tempo com 4 séries (uma por categoria de custo), blended mês a mês, para comparar
+// contra a meta de cada categoria e ver se a carteira está evoluindo ou piorando.
+function renderCostTrendChart(containerId, trend){
+  try {
+    const n = trend.length;
+    if(n===0){
+      document.getElementById(containerId).innerHTML = `<div class="empty-note">Sem histórico disponível.</div>`;
+      return;
+    }
+    const W=measureWidth(containerId,1160), H=measureHeight(containerId,400);
+    const narrow = W < 480;
+    const padL = narrow ? 44 : 64, padR = narrow ? 20 : 40, padT = 20, padB = narrow ? 34 : 46;
+    const innerW=W-padL-padR, innerH=H-padT-padB;
+    const gap = innerW/n;
+    const xAt = i => padL+gap*i+gap/2;
+    const tickFont = narrow ? 9 : 10.5;
+
+    const allValues = trend.flatMap(t => COST_CATEGORIES.map(cat => t[cat.key]));
+    const maxV = Math.max(...allValues, 0.02) * 1.2;
+    const yScale = v => padT+innerH-(v/maxV*innerH);
+
+    let gridlines='', labels='';
+    const ticks=4;
+    for(let i=0;i<=ticks;i++){
+      const v = maxV/ticks*i;
+      const y = yScale(v);
+      gridlines += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#22262d"/>`;
+      gridlines += `<text x="${padL-8}" y="${(y+4).toFixed(1)}" text-anchor="end" font-size="${tickFont}" fill="#A9B0B8">${fmtPct1(v)}</text>`;
+    }
+
+    const labelEvery = Math.max(1, Math.ceil(n / Math.max(4, Math.floor(innerW/48))));
+    trend.forEach((t,i)=>{
+      if(i%labelEvery===0 || i===n-1){
+        labels += `<text x="${xAt(i).toFixed(1)}" y="${H-12}" text-anchor="middle" font-size="${tickFont}" fill="#A9B0B8">${t.label}</text>`;
+      }
+    });
+
+    let paths='', dots='';
+    COST_CATEGORIES.forEach(cat => {
+      const color = COST_TREND_COLORS[cat.key];
+      const pts = trend.map((t,i) => [xAt(i), yScale(t[cat.key])]);
+      const linePath = pts.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+      paths += `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="2"/>`;
+      const dotR = narrow ? 2.6 : 3.4;
+      pts.forEach((p,i) => {
+        const t = trend[i];
+        const over = t[cat.key] > cat.target;
+        const tip = esc(cat.label)+'<br>'+esc(t.label)+'<br>'+esc(fmtPct1(t[cat.key]))+' (meta '+esc(fmtPct1(cat.target))+')'+(over?" <span style='color:#FE6A2D'>acima da meta</span>":" <span style='color:#A9B0B8'>dentro da meta</span>");
+        dots += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${dotR}" fill="${color}" data-tooltip="${tip}"/>`;
+      });
+    });
+
+    document.getElementById(containerId).innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;">${gridlines}${paths}${dots}${labels}</svg>`;
+  } catch(e){ console.error('renderCostTrendChart '+containerId, e); }
+}
+
 // ---------- Render a full snapshot into the page ----------
 // Holds the most recently rendered snapshot so the export buttons always pull fresh
 // data for whichever month is on screen, without recomputing anything themselves.
@@ -1196,6 +1283,8 @@ function renderSnapshot(k){
   renderScatter('chartQuadrant', k.quadrant);
 
   renderTrendChart('chartTrend', DATA.trend, {highlightPeriod: k.period});
+
+  renderCostTrendChart('chartCostTrend', COST_TREND);
 }
 
 // ---------- Excel export (SheetJS) for the scrollable tables ----------
