@@ -268,6 +268,7 @@
     <a href="#ofensores" class="dashnav-link">Ofensores por custo</a>
     <a href="#matriz" class="dashnav-link">Matriz de retenção</a>
     <a href="#ranking" class="dashnav-link">Ranking de impacto</a>
+    <a href="#top30" class="dashnav-link">Top 30 por receita</a>
     <a href="#criticos" class="dashnav-link">Clientes críticos</a>
     <a href="#plano" class="dashnav-link">Plano de ação</a>
   </nav>
@@ -416,6 +417,22 @@
         <table>
           <thead><tr><th>Cliente</th><th class="num">Receita (R$)</th><th class="num">Margem direta</th><th>Status</th><th class="num">Infra/Fat</th><th class="num">Suc&amp;Sup/Fat</th></tr></thead>
           <tbody id="tblTopRevenue"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="top30">
+    <div class="section-head">
+      <h2 class="section-title">Top 30 clientes por receita</h2>
+      <div class="section-note">Receita, margem direta e representatividade de cada cliente sobre o total da receita ativa e da margem direta do mês. Referência: <span class="snap-period">—</span>.</div>
+    </div>
+    <div class="card">
+      <div class="offender-total" id="top30Summary"></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>#</th><th>Cliente</th><th class="num">Receita (R$)</th><th class="num">% da receita</th><th class="num">Margem direta</th><th class="num">Margem (R$)</th><th class="num">% da margem</th></tr></thead>
+          <tbody id="tblTop30"></tbody>
         </table>
       </div>
     </div>
@@ -639,6 +656,18 @@ function computeSnapshot(periodInt){
   const concentracao_top1_pct = receita_total && sortedByRev[0] ? sortedByRev[0].receita/receita_total : 0;
   const concentracao_top5_pct = receita_total ? top5/receita_total : 0;
 
+  // Top 30 por receita, com a representatividade de cada cliente sobre o total da receita
+  // ativa e da margem direta total do mês (não apenas sobre a soma dos próprios 30).
+  const top_30 = sortedByRev.slice(0,30).map(r => ({
+    ...r,
+    rep_receita_pct: receita_total ? r.receita/receita_total : 0,
+    rep_margem_pct: margem_direta_rs ? r.margem_rs/margem_direta_rs : 0,
+  }));
+  const top30_receita = top_30.reduce((a,r)=>a+r.receita,0);
+  const top30_margem = top_30.reduce((a,r)=>a+r.margem_rs,0);
+  const concentracao_top30_receita_pct = receita_total ? top30_receita/receita_total : 0;
+  const concentracao_top30_margem_pct = margem_direta_rs ? top30_margem/margem_direta_rs : 0;
+
   // Ofensores por categoria de custo: entre os clientes ativos do mês, quem excede a meta de
   // cada categoria (Impostos/Infra/Comissão/Suporte&Sucesso), ranqueados pelo excedente em R$.
   const offenders = {};
@@ -661,6 +690,7 @@ function computeSnapshot(periodInt){
     receita_total, margem_direta_rs, blended_margem_pct, lucro_total,
     bucket_counts, bucket_revenue, bucket_margem,
     top_revenue, critical, healthy,
+    top_30, concentracao_top30_receita_pct, concentracao_top30_margem_pct,
     driver_counts, driver_revenue_impact,
     offenders,
     quadrant: bucketed,
@@ -929,6 +959,23 @@ function renderSnapshot(k){
         <td class="num">${fmtPct(r.infra_pct)}</td>
         <td class="num">${fmtPct(r.sucsup_pct)}</td>
       </tr>`).join('') || `<tr><td colspan="6" class="empty-note">Sem dados.</td></tr>`;
+
+    const top30SummaryEl = document.getElementById('top30Summary');
+    if(top30SummaryEl){
+      top30SummaryEl.innerHTML = k.top_30.length
+        ? `Os ${k.top_30.length} listados somam <span class="off-excess">${fmtPct(k.concentracao_top30_receita_pct)} da receita ativa</span> e <span class="off-excess">${fmtPct(k.concentracao_top30_margem_pct)} da margem direta total</span> do mês.`
+        : '';
+    }
+    document.getElementById('tblTop30').innerHTML = k.top_30.map((r,idx) => `
+      <tr>
+        <td class="num">${idx+1}</td>
+        <td class="name">${r.cliente}</td>
+        <td class="num">${fmtMoneyFull(r.receita)}</td>
+        <td class="num">${fmtPct1(r.rep_receita_pct)}</td>
+        <td class="num">${marginSpan(r.margem_pct)}</td>
+        <td class="num">${fmtMoneyFull(r.margem_rs)}</td>
+        <td class="num">${fmtPct1(r.rep_margem_pct)}</td>
+      </tr>`).join('') || `<tr><td colspan="7" class="empty-note">Sem dados.</td></tr>`;
 
     function costCell(actual, target){
       const cls = actual > target ? 'over' : 'ok';
