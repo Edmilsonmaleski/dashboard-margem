@@ -304,6 +304,7 @@
     <a href="#corrosao" class="dashnav-link">Corrosão de margem</a>
     <a href="#ofensores" class="dashnav-link">Ofensores por custo</a>
     <a href="#evol-custos" class="dashnav-link">Evolução dos custos</a>
+    <a href="#suc-sup" class="dashnav-link">Suporte &amp; Sucesso 12m</a>
     <a href="#matriz" class="dashnav-link">Matriz de retenção</a>
     <a href="#ranking" class="dashnav-link">Ranking de impacto</a>
     <a href="#top30" class="dashnav-link">Top 30 por receita</a>
@@ -466,6 +467,21 @@
         <div class="legend-chip"><span class="sw" style="background:#FE6A2D"></span>Infraestrutura (meta 12,5%)</div>
         <div class="legend-chip"><span class="sw" style="background:#FFA986"></span>Comissão (meta 3,5%)</div>
         <div class="legend-chip"><span class="sw" style="background:#C23E00"></span>Suporte &amp; Sucesso (meta 4,0%)</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="suc-sup">
+    <div class="section-head">
+      <h2 class="section-title">Suporte &amp; Sucesso — últimos 12 meses</h2>
+      <div class="section-note">Custo em R$ e peso sobre a receita ativa, mês a mês, até <span class="snap-period">—</span>. A linha tracejada marca a meta de 4,0% da receita.</div>
+    </div>
+    <div class="card">
+      <div class="resumo-kpis" id="ss12Kpis"></div>
+      <div class="chart-box tall"><div id="chartSS12"></div></div>
+      <div class="legend-row">
+        <div class="legend-chip"><span class="sw" style="background:#C23E00"></span>Custo de Suporte &amp; Sucesso (R$) — rótulo = % da receita</div>
+        <div class="legend-chip"><span class="sw" style="background:#A9B0B8"></span>Meta: 4,0% da receita do mês (R$)</div>
       </div>
     </div>
   </section>
@@ -1087,6 +1103,57 @@ function renderCostTrendChart(containerId, trend){
   } catch(e){ console.error('renderCostTrendChart '+containerId, e); }
 }
 
+
+// ---------- Suporte & Sucesso: últimos 12 meses (custo R$ e % da receita ativa) ----------
+function computeSS12(periodInt){
+  const idx = PERIODS.findIndex(p => p.period === periodInt);
+  const slice = PERIODS.slice(Math.max(0, idx-11), idx+1);
+  const SS_TARGET = (COST_CATEGORIES.find(c => c.key==='sucsup_pct')||{target:0.04}).target;
+  const months = slice.map(p => {
+    const rows = (recordsByPeriod[p.period]||[]).filter(r => r.status==='Ativo');
+    const receita = rows.reduce((a,r)=>a+r.receita,0);
+    const custo = rows.reduce((a,r)=>a+Math.abs(r.sucsup_pct||0)*r.receita,0);
+    return {label:p.label, receita, custo, pct: receita? custo/receita : 0, meta_rs: receita*SS_TARGET};
+  });
+  const receita = months.reduce((a,m)=>a+m.receita,0);
+  const custo = months.reduce((a,m)=>a+m.custo,0);
+  const meta_rs = months.reduce((a,m)=>a+m.meta_rs,0);
+  return {months, receita, custo, meta_rs, pct: receita? custo/receita : 0, target: SS_TARGET};
+}
+function renderSS12(k){
+  try {
+    const d = computeSS12(k.period);
+    const over = d.custo - d.meta_rs;
+    document.getElementById('ssKpisPlaceholder');
+    document.getElementById('ss12Kpis').innerHTML = `
+      <div class="resumo-kpi"><div class="resumo-kpi-label">Custo de Suporte &amp; Sucesso (${d.months.length} meses)</div><div class="resumo-kpi-value">${fmtMoneyFull(d.custo)}</div></div>
+      <div class="resumo-kpi"><div class="resumo-kpi-label">% da receita ativa no período</div><div class="resumo-kpi-value" style="color:${d.pct>d.target?'var(--orange2)':'var(--cream)'}">${fmtPct1(d.pct)}</div></div>
+      <div class="resumo-kpi"><div class="resumo-kpi-label">${over>0?'Acima':'Abaixo'} da meta de ${fmtPct1(d.target)} (${fmtMoneyFull(d.meta_rs)})</div><div class="resumo-kpi-value" style="color:${over>0?'var(--orange2)':'var(--cream)'}">${over>0?'+':'−'}${fmtMoneyFull(Math.abs(over))}</div></div>`;
+    const id='chartSS12', n=d.months.length;
+    if(!n){ document.getElementById(id).innerHTML='<div class="empty-note">Sem histórico disponível.</div>'; return; }
+    const W=measureWidth(id,1160), H=measureHeight(id,400), narrow=W<480;
+    const padL=narrow?48:72, padR=narrow?12:24, padT=28, padB=narrow?34:46;
+    const innerW=W-padL-padR, innerH=H-padT-padB, gap=innerW/n, bw=Math.min(54, gap*0.62);
+    const xAt=i=>padL+gap*i+gap/2, tf=narrow?9:10.5;
+    const maxV=Math.max(...d.months.map(m=>Math.max(m.custo,m.meta_rs)),1)*1.15;
+    const y=v=>padT+innerH-(v/maxV*innerH);
+    const fmtK=v=>v>=1000?(v/1000).toLocaleString('pt-BR',{maximumFractionDigits:0})+' mil':String(Math.round(v));
+    let grid='',bars='',lab='',meta='';
+    for(let i=0;i<=4;i++){ const v=maxV/4*i, yy=y(v);
+      grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="#22262d"/><text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" font-size="${tf}" fill="#A9B0B8">${fmtK(v)}</text>`; }
+    d.months.forEach((m,i)=>{
+      const x=xAt(i), top=y(m.custo), color=m.pct>d.target?'#C23E00':'#FFA986';
+      const tip=esc(m.label)+'<br>Custo: '+esc(fmtMoneyFull(m.custo))+'<br>'+esc(fmtPct1(m.pct))+' da receita ('+esc(fmtMoneyFull(m.receita))+')<br>Meta '+esc(fmtPct1(d.target))+': '+esc(fmtMoneyFull(m.meta_rs));
+      bars+=`<rect x="${(x-bw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${(padT+innerH-top).toFixed(1)}" rx="3" fill="${color}" data-tooltip="${tip}"/>`;
+      bars+=`<text x="${x.toFixed(1)}" y="${(top-6).toFixed(1)}" text-anchor="middle" font-size="${tf}" font-weight="700" fill="#F2EDE4">${fmtPct1(m.pct)}</text>`;
+      lab+=`<text x="${x.toFixed(1)}" y="${H-12}" text-anchor="middle" font-size="${tf}" fill="#A9B0B8">${m.label}</text>`;
+    });
+    const mp=d.months.map((m,i)=>(i?'L':'M')+xAt(i).toFixed(1)+','+y(m.meta_rs).toFixed(1)).join(' ');
+    meta=`<path d="${mp}" fill="none" stroke="#A9B0B8" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+    document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;">${grid}${bars}${meta}${lab}</svg>`;
+  } catch(e){ console.error('renderSS12', e); }
+}
+
 // ---------- Render a full snapshot into the page ----------
 // Holds the most recently rendered snapshot so the export buttons always pull fresh
 // data for whichever month is on screen, without recomputing anything themselves.
@@ -1286,6 +1353,7 @@ function renderSnapshot(k){
   renderTrendChart('chartTrend', DATA.trend, {highlightPeriod: k.period});
 
   renderCostTrendChart('chartCostTrend', COST_TREND);
+  renderSS12(k);
 }
 
 // ---------- Excel export (SheetJS) for the scrollable tables ----------
